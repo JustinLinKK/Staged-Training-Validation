@@ -7,6 +7,7 @@ protocol channel.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import random
@@ -18,10 +19,12 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
 from model_preflight.core.diagnostics import Diagnostic
 from model_preflight.core.enums import Classification, Severity, StageName, StageStatus
+from model_preflight.execution.resource_limits import apply_resource_limits
 from model_preflight.execution.worker_protocol import PROTOCOL_VERSION, WorkerResponse
 from model_preflight.reporting.stacktrace import compact_stacktrace
 
@@ -950,21 +953,52 @@ def main() -> None:
         sys.addaudithook(_block_network)
     try:
         started = time.monotonic()
+        # Apply limits after exec, before importing PyTorch or candidate code. A
+        # preexec_fn can deadlock when the controller launches workers from threads.
+        if "resource_limits" in request:
+            apply_resource_limits(**request["resource_limits"])
+        cpu_threads = int(request.get("cpu_threads", 1))
+        if cpu_threads > 1:
+            # Fail before native libraries can hang trying to create a thread
+            # under a UID-wide process limit that is already exhausted.
+            probe = Thread()
+            try:
+                probe.start()
+            except RuntimeError as exc:
+                raise OSError(
+                    errno.EAGAIN,
+                    "worker cannot create CPU threads; check maximum_processes and host PID limits",
+                ) from exc
+            probe.join()
+        import torch
+
+        torch.set_num_threads(cpu_threads)
+        torch.set_num_interop_threads(1)
         response = _run(request)
+        response.evidence["cpu_threads"] = torch.get_num_threads()
     except BaseException as exc:
+        resource_failure = isinstance(exc, OSError) and exc.errno in {errno.EAGAIN, errno.ENOMEM}
         diagnostic = Diagnostic(
-            code="CHK003",
-            severity=Severity.ERROR,
+            code="CHK001" if resource_failure else "CHK003",
+            severity=Severity.WARNING if resource_failure else Severity.ERROR,
             stage=str(request.get("stage", "worker")),
-            classification=Classification.CHECKER_ERROR,
-            message=f"internal worker failure: {type(exc).__name__}: {exc}",
+            classification=(
+                Classification.INCONCLUSIVE if resource_failure else Classification.CHECKER_ERROR
+            ),
+            message=(
+                f"worker resource limit: {type(exc).__name__}: {exc}" if resource_failure
+                else f"internal worker failure: {type(exc).__name__}: {exc}"
+            ),
             exception_type=type(exc).__name__,
             stack_trace=compact_stacktrace(traceback.format_exc()),
         )
         response = WorkerResponse(
-            status=StageStatus.INTERNAL_ERROR.value,
+            status=(
+                StageStatus.INCONCLUSIVE.value
+                if resource_failure else StageStatus.INTERNAL_ERROR.value
+            ),
             diagnostics=[diagnostic.to_dict()],
-            evidence={},
+            evidence={"termination_cause": "resource_limit"} if resource_failure else {},
         )
     response.evidence.update({
         "worker_execution_seconds": time.monotonic() - started,

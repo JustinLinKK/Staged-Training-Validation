@@ -8,6 +8,7 @@ import os
 import platform
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -121,6 +122,28 @@ class PreflightRunner:
             return original
         return result
 
+    def _scenarios(
+        self, stage: StageName, scenarios: list[dict[str, Any]], timeout: float,
+        *, reduction_allowed: bool = False,
+    ) -> StageResult:
+        def run(scenario: dict[str, Any]) -> StageResult:
+            return self._worker(stage, scenario, timeout, reduction_allowed=reduction_allowed)
+
+        workers = min(self.manifest.execution.max_workers, len(scenarios))
+        started = time.monotonic()
+        if workers <= 1:
+            results = [run(scenario) for scenario in scenarios]
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                # map preserves manifest order regardless of completion order.
+                results = list(pool.map(run, scenarios))
+        result = combine_stage_results(stage.value, results)
+        if workers > 1:
+            result.evidence["worker_seconds"] = result.duration_seconds
+            result.duration_seconds = time.monotonic() - started
+            result.evidence["parallel_workers"] = workers
+        return result
+
     def _cache_inputs(self) -> dict[str, Any]:
         return {
             "candidate_hash": self.candidate_hash,
@@ -133,7 +156,10 @@ class PreflightRunner:
             "shape_reducer_revision": SHAPE_REDUCER_REVISION,
         }
 
-    def run(self) -> PreflightReport:
+    def run_static(self) -> StageResult:
+        return _timed(run_static_checks, self.manifest)
+
+    def run(self, *, static_result: StageResult | None = None) -> PreflightReport:
         key = cache_key(self._cache_inputs())
         cache = ResultCache()
         if self.use_cache:
@@ -146,7 +172,7 @@ class PreflightRunner:
         normal_scenario = self.manifest.scenarios.cpu_scenarios()[0]
 
         if StageName.STATIC_SOURCE.value in self.only:
-            result = _timed(run_static_checks, self.manifest)
+            result = self.run_static() if static_result is None else static_result
             stages.append(result)
             by_name[result.name] = result
         static_failed = (
@@ -192,16 +218,10 @@ class PreflightRunner:
                 by_name[result.name] = result
 
             if StageName.ABSTRACT_FORWARD.value in self.only:
-                abstract_results = [
-                    self._worker(
-                        StageName.ABSTRACT_FORWARD,
-                        scenario,
-                        self.manifest.execution.abstract_timeout_seconds,
-                    )
-                    for scenario in self.manifest.scenarios.matrix()
-                ]
-                result = combine_stage_results(
-                    StageName.ABSTRACT_FORWARD.value, abstract_results
+                result = self._scenarios(
+                    StageName.ABSTRACT_FORWARD,
+                    self.manifest.scenarios.matrix(),
+                    self.manifest.execution.abstract_timeout_seconds,
                 )
                 stages.append(result)
                 by_name[result.name] = result
@@ -218,16 +238,12 @@ class PreflightRunner:
                 cpu_scenarios = self.manifest.scenarios.cpu_scenarios()
                 if self.manifest.task.drop_last:
                     cpu_scenarios = cpu_scenarios[:1]
-                cpu_results = [
-                    self._worker(
-                        StageName.CPU_TRAINING,
-                        scenario,
-                        self.manifest.execution.cpu_timeout_seconds,
-                        reduction_allowed=reduction_allowed,
-                    )
-                    for scenario in cpu_scenarios
-                ]
-                result = combine_stage_results(StageName.CPU_TRAINING.value, cpu_results)
+                result = self._scenarios(
+                    StageName.CPU_TRAINING,
+                    cpu_scenarios,
+                    self.manifest.execution.cpu_timeout_seconds,
+                    reduction_allowed=reduction_allowed,
+                )
                 stages.append(result)
                 by_name[result.name] = result
 

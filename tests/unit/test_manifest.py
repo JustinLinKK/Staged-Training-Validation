@@ -99,3 +99,32 @@ def test_reduction_defaults_and_seed_round_trip() -> None:
     assert "seed" not in manifest.to_dict()["execution"]
     seeded = replace(manifest, execution=replace(manifest.execution, seed=123))
     assert seeded.to_dict()["execution"]["seed"] == 123
+
+
+@pytest.mark.parametrize("field", ["max_workers", "cpu_threads"])
+@pytest.mark.parametrize("value", [0, -1, 1.5, True])
+def test_invalid_parallel_settings_rejected(tmp_path: Path, field: str, value: object) -> None:
+    import yaml
+
+    raw = yaml.safe_load((FIXTURES / "valid.yaml").read_text())
+    raw["candidate"]["root"] = str(FIXTURES / "valid_candidate")
+    raw["execution"][field] = value
+    path = tmp_path / "preflight.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ManifestError):
+        load_manifest(path)
+
+
+def test_parallel_settings_defaults_and_round_trip(tmp_path: Path) -> None:
+    import yaml
+
+    manifest = load_manifest(FIXTURES / "valid.yaml")
+    assert manifest.execution.max_workers == manifest.execution.cpu_threads == 1
+    raw = manifest.to_dict()
+    raw["execution"].update(max_workers=4, cpu_threads=2)
+    path = tmp_path / "preflight.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    configured = load_manifest(path)
+    assert configured.execution.max_workers == 4
+    assert configured.execution.cpu_threads == 2
+    assert configured.to_dict() == raw

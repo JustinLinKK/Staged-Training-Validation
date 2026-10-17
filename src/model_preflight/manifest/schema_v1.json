@@ -81,6 +81,8 @@
         "disable_network": {"type": "boolean", "default": true},
         "allow_real_cpu_abstract_fallback": {"type": "boolean", "default": false},
         "cache": {"type": "boolean", "default": false},
+        "max_workers": {"type": "integer", "minimum": 1, "default": 1},
+        "cpu_threads": {"type": "integer", "minimum": 1, "default": 1},
         "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295},
         "shape_reduction": {
           "type": "object",

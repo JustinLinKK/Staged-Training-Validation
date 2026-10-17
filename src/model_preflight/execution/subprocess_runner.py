@@ -15,7 +15,6 @@ from typing import Any
 from model_preflight.core.diagnostics import Diagnostic
 from model_preflight.core.enums import Classification, Severity, StageStatus
 from model_preflight.core.results import StageResult
-from model_preflight.execution.resource_limits import apply_resource_limits
 from model_preflight.execution.timeout import kill_process_group, terminate_process_group
 from model_preflight.execution.worker_protocol import PROTOCOL_VERSION, WorkerRequest
 from model_preflight.manifest.models import ExecutionConfig
@@ -24,7 +23,9 @@ from model_preflight.reporting.stacktrace import compact_stacktrace
 _SECRET_FRAGMENTS = ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "API_KEY", "AUTH")
 
 
-def _safe_environment(temp_dir: Path, disable_network: bool) -> dict[str, str]:
+def _safe_environment(
+    temp_dir: Path, disable_network: bool, cpu_threads: int = 1,
+) -> dict[str, str]:
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -38,8 +39,11 @@ def _safe_environment(temp_dir: Path, disable_network: bool) -> dict[str, str]:
             "XDG_CACHE_HOME": str(temp_dir / "cache"),
             "HF_HUB_OFFLINE": "1" if disable_network else "0",
             "TRANSFORMERS_OFFLINE": "1" if disable_network else "0",
-            "OMP_NUM_THREADS": "1",
-            "MKL_NUM_THREADS": "1",
+            "OMP_NUM_THREADS": str(cpu_threads),
+            "MKL_NUM_THREADS": str(cpu_threads),
+            "OPENBLAS_NUM_THREADS": str(cpu_threads),
+            "NUMEXPR_NUM_THREADS": str(cpu_threads),
+            "VECLIB_MAXIMUM_THREADS": str(cpu_threads),
             "MODEL_PREFLIGHT_DISABLE_NETWORK": "1" if disable_network else "0",
             "PYTHONNOUSERSITE": "1",
         }
@@ -92,15 +96,9 @@ class SubprocessRunner:
             (temp_dir / "cache").mkdir()
             command = [sys.executable, "-m", "model_preflight.execution.worker_main"]
 
-            def set_limits() -> None:
-                apply_resource_limits(
-                    timeout_seconds=timeout_seconds,
-                    memory_mb=self.execution.maximum_cpu_memory_mb,
-                    maximum_processes=self.execution.maximum_processes,
-                    maximum_output_bytes=self.execution.maximum_output_bytes,
-                )
-
-            environment = _safe_environment(temp_dir, self.execution.disable_network)
+            environment = _safe_environment(
+                temp_dir, self.execution.disable_network, self.execution.cpu_threads,
+            )
             if self.execution.seed is not None:
                 environment["PYTHONHASHSEED"] = str(self.execution.seed)
             process = subprocess.Popen(
@@ -112,9 +110,17 @@ class SubprocessRunner:
                 cwd=temp_dir,
                 env=environment,
                 start_new_session=True,
-                preexec_fn=set_limits,
             )
-            payload = json.dumps(request.to_dict(), sort_keys=True)
+            payload = json.dumps({
+                **request.to_dict(),
+                "resource_limits": {
+                    "timeout_seconds": timeout_seconds * self.execution.cpu_threads,
+                    "memory_mb": self.execution.maximum_cpu_memory_mb,
+                    "maximum_processes": self.execution.maximum_processes,
+                    "maximum_output_bytes": self.execution.maximum_output_bytes,
+                },
+                "cpu_threads": self.execution.cpu_threads,
+            }, sort_keys=True)
             try:
                 stdout, stderr = process.communicate(payload, timeout=timeout_seconds)
             except subprocess.TimeoutExpired:

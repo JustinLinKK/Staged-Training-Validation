@@ -123,6 +123,8 @@ def load_manifest(path: str | Path) -> Manifest:
             cache=bool(execution_raw.get("cache", False)),
             shape_reduction=ShapeReductionConfig(**execution_raw.get("shape_reduction", {})),
             seed=execution_raw.get("seed"),
+            max_workers=int(execution_raw.get("max_workers", 1)),
+            cpu_threads=int(execution_raw.get("cpu_threads", 1)),
         ),
         policy=PolicyConfig(
             mode=PolicyMode(policy_raw.get("mode", "balanced")),

@@ -48,6 +48,13 @@ report = check("preflight.yaml")
 print(report.overall_status, report.gpu_submission_recommended)
 ```
 
+For speculative scheduling, use `model-preflight check preflight.yaml --format events`.
+It flushes a `STATIC_PASS` JSON event after source checks, then a terminal result after the
+complete CPU workflow. The framework can queue the candidate while that worker continues.
+For trusted local use, `from model_preflight import submit` provides the same behavior through
+a background future. See [agent integration](docs/agent-integration.md) for CPU container
+deployment, event handling, and late rejection. A provisional pass is not a final admission.
+
 ## Checks
 
 The default pipeline runs:
@@ -154,12 +161,20 @@ execution:
   disable_network: true
   allow_real_cpu_abstract_fallback: false
   cache: false
+  max_workers: 1
+  cpu_threads: 1
 policy:
   mode: balanced
 ```
 
 Relative paths resolve against the manifest directory. Unknown versions and fields are rejected
 before execution. See [docs/manifest.md](docs/manifest.md) and the packaged JSON Schema.
+
+For multicore checking, set `execution.max_workers: 4` to run independent abstract and CPU
+training scenarios concurrently in fresh processes. `execution.cpu_threads` controls CPU
+threads inside each worker; start with `1` when running several workers. Both default to `1`.
+Original-shape checks still finish before reduced-width workflows begin. See the
+[parallel execution settings](docs/manifest.md#parallel-execution) for resource budgeting.
 
 ## Isolation
 

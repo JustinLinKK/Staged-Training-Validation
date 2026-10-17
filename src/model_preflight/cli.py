@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 
@@ -13,6 +14,7 @@ from model_preflight.engine.registry import STAGE_ORDER
 from model_preflight.reporting.json_report import render_json, write_json
 from model_preflight.reporting.junit_report import write_junit
 from model_preflight.reporting.text_report import render_text
+from model_preflight.speculative import submit
 from model_preflight.version import __version__
 
 EXIT_CODES = {
@@ -36,9 +38,9 @@ def _parser() -> argparse.ArgumentParser:
     command.add_argument("--junit", help="write a JUnit XML report")
     command.add_argument(
         "--format",
-        choices=("text", "json"),
+        choices=("text", "json", "events"),
         default="text",
-        help="stdout report format",
+        help="stdout format; events streams provisional admission then the final result as JSONL",
     )
     command.add_argument(
         "--only",
@@ -51,13 +53,26 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    arguments = _parser().parse_args(argv)
+    parser = _parser()
+    arguments = parser.parse_args(argv)
+    if arguments.format == "events" and arguments.only:
+        parser.error("--format events requires the complete workflow; --only is not supported")
     try:
-        report = check(
-            arguments.manifest,
-            only=set(arguments.only) if arguments.only else None,
-            use_cache=False if arguments.no_cache else None,
-        )
+        if arguments.format == "events":
+            submission = submit(arguments.manifest)
+            print(json.dumps(submission.initial.to_dict()), flush=True)
+            final = submission.completion.result()
+            if not submission.initial.terminal:
+                print(json.dumps(final.to_dict()), flush=True)
+            if final.report is None:
+                return EXIT_CODES[OverallStatus(final.status)]
+            report = final.report
+        else:
+            report = check(
+                arguments.manifest,
+                only=set(arguments.only) if arguments.only else None,
+                use_cache=False if arguments.no_cache else None,
+            )
     except ManifestError as exc:
         print(f"model-preflight: invalid manifest: {exc}", file=sys.stderr)
         return 30
@@ -71,7 +86,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_json(report, arguments.report)
     if arguments.junit:
         write_junit(report, arguments.junit)
-    print(render_json(report) if arguments.format == "json" else render_text(report), end="")
+    if arguments.format != "events":
+        print(render_json(report) if arguments.format == "json" else render_text(report), end="")
     return EXIT_CODES[report.overall_status]
 
 

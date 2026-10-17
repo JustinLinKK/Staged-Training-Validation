@@ -105,6 +105,8 @@ class ExecutionConfig:
     cache: bool = False
     shape_reduction: ShapeReductionConfig = field(default_factory=ShapeReductionConfig)
     seed: int | None = None
+    max_workers: int = 1
+    cpu_threads: int = 1
 
 
 @dataclass(frozen=True)
@@ -178,6 +180,8 @@ class Manifest:
                     self.execution.allow_real_cpu_abstract_fallback
                 ),
                 "cache": self.execution.cache,
+                "max_workers": self.execution.max_workers,
+                "cpu_threads": self.execution.cpu_threads,
                 "shape_reduction": {
                     "mode": self.execution.shape_reduction.mode,
                     "width_factor": self.execution.shape_reduction.width_factor,

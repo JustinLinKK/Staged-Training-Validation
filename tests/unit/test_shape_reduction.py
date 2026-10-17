@@ -256,19 +256,25 @@ def test_seed_reproduces_training_loss() -> None:
 @pytest.mark.parametrize(
     "blocked_stage", [None, "construction", "data_contract", "abstract_forward"]
 )
-def test_prerequisite_gate_and_original_memory(blocked_stage: str | None) -> None:
+@pytest.mark.parametrize("workers", [1, 3])
+def test_prerequisite_gate_and_original_memory(blocked_stage: str | None, workers: int) -> None:
     manifest = load_manifest(Path(__file__).parents[1] / "fixtures" / "valid.yaml")
     manifest = replace(
         manifest,
         execution=replace(
             manifest.execution,
             shape_reduction=ShapeReductionConfig(mode="auto"),
+            max_workers=workers,
         ),
     )
     runner = PreflightRunner(manifest)
     requests = []
 
     def run(request: Any, timeout: float) -> StageResult:
+        if request.shape_reduction_allowed:
+            assert sum(r.stage == "abstract_forward" for r in requests) == len(
+                manifest.scenarios.matrix()
+            )
         requests.append(request)
         return StageResult(
             name=request.stage,
