@@ -111,7 +111,11 @@ def _structured_plan(module: Any, settings: dict[str, Any]) -> dict[str, dict[st
                 raise UnsupportedReduction(f"unsupported_mamba_module:{type(child).__name__}")
         return result
     if mamba_kind == "MambaMixer":
-        if module.use_mambapy or getattr(module, "use_associative_scan", False):
+        if (
+            module.use_mambapy
+            or getattr(module, "use_associative_scan", False)
+            or getattr(getattr(module, "config", None), "use_associative_scan", False)
+        ):
             raise UnsupportedReduction("unsupported_mamba_scan_backend")
         children = dict(module.named_children())
         expected = {"conv1d", "act", "in_proj", "x_proj", "dt_proj", "out_proj"}

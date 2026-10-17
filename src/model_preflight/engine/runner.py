@@ -36,16 +36,19 @@ def _hash_tree(root: Path | None) -> str:
             relative = path.relative_to(root)
         except ValueError:
             continue
-        if (
-            path.is_symlink()
-            or not path.is_file()
-            or any(
-                part in {".git", "__pycache__", ".model-preflight-cache"}
-                for part in relative.parts
-            )
+        if any(
+            part in {".git", "__pycache__", ".model-preflight-cache"}
+            for part in relative.parts
         ):
             continue
+        if not path.is_file() and not path.is_symlink():
+            continue
         digest.update(str(relative).encode("utf-8"))
+        if path.is_symlink():
+            digest.update(b"<symlink>")
+            digest.update(os.fsencode(path.readlink()))
+        if not path.is_file():
+            continue
         try:
             digest.update(path.read_bytes())
         except OSError:
