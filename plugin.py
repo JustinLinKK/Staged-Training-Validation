@@ -208,6 +208,7 @@ class SpeculativePreflight:
         )
         (report_dir / "static.json").write_text(json.dumps(report, indent=2) + "\n")
         if not report["admitted"]:
+            (report_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
             outcome = {"status": "static_rejected", "static": report, "job_id": None}
         else:
             job_id = submit()
@@ -218,6 +219,14 @@ class SpeculativePreflight:
             if evidence["status"] == "passed":
                 outcome = {"status": "probe_passed", "static": report, "job_id": job_id, "probe": evidence}
             elif evidence["status"] == "confirmed_bug":
+                final_report = {
+                    "status": "rejected", "admitted": False,
+                    "assurance": "two_epoch_cpu_probe", "issues": ["cpu_probe_confirmed_bug"],
+                    "diagnostics": [{"code": "cpu_probe_confirmed_bug",
+                                     "message": "The candidate CPU probe reproduced a defect",
+                                     "evidence": evidence}],
+                }
+                (report_dir / "report.json").write_text(json.dumps(final_report, indent=2) + "\n")
                 cancel(job_id)
                 outcome = {"status": "probe_rejected", "static": report, "job_id": job_id, "probe": evidence}
             else:

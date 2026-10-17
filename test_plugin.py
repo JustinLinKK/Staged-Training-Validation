@@ -62,6 +62,10 @@ def test_only_confirmed_cpu_bug_cancels_provisional_job(tmp_path: Path) -> None:
         )
         assert result["status"] == expected_status
         assert cancelled == expected_cancel
+        if expected_status == "probe_rejected":
+            report = json.loads((tmp_path / "preflight" / "buggy" / "report.json").read_text())
+            assert report["admitted"] is False
+            assert report["issues"] == ["cpu_probe_confirmed_bug"]
 
 
 def test_protocol_checks_source_without_executing_it(tmp_path: Path) -> None:
