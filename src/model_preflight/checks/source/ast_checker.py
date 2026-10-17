@@ -354,7 +354,8 @@ def _dataloader_cuda_worker_diagnostics(
             diagnostics.append(
                 _diagnostic(
                     "SRC_DATALOADER_CUDA001",
-                    "DataLoader workers invoke a collate function that moves tensors to CUDA; keep collation on CPU and move the batch in the parent training loop",
+                    "DataLoader workers invoke a collate function that moves tensors to CUDA; "
+                    "keep collation on CPU and move the batch in the parent training loop",
                     path,
                     node,
                     severity=Severity.ERROR,
