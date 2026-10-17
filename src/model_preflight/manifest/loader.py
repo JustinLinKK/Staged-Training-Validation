@@ -18,6 +18,7 @@ from model_preflight.manifest.models import (
     Manifest,
     PolicyConfig,
     ScenarioConfig,
+    ShapeReductionConfig,
     TargetConfig,
     TaskConfig,
 )
@@ -120,6 +121,8 @@ def load_manifest(path: str | Path) -> Manifest:
                 execution_raw.get("allow_real_cpu_abstract_fallback", False)
             ),
             cache=bool(execution_raw.get("cache", False)),
+            shape_reduction=ShapeReductionConfig(**execution_raw.get("shape_reduction", {})),
+            seed=execution_raw.get("seed"),
         ),
         policy=PolicyConfig(
             mode=PolicyMode(policy_raw.get("mode", "balanced")),

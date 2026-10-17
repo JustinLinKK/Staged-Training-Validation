@@ -14,6 +14,13 @@ def render_text(report: PreflightReport) -> str:
     ]
     for stage in report.stages:
         lines.append(f"  {stage.status.value:14} {stage.name} ({stage.duration_seconds:.3f}s)")
+        if any(
+            item.get("shape_reduction", {}).get("applied", False)
+            for item in stage.evidence.get("scenarios", [stage.evidence])
+        ):
+            lines.append(
+                "                 reduced hidden widths; original numerical behavior untested"
+            )
     if report.diagnostics:
         lines.extend(["", "Diagnostics:"])
         for item in report.diagnostics:

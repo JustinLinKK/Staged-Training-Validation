@@ -72,6 +72,15 @@ The default pipeline runs:
 Every stage records scenario evidence. All runtime stages use a fresh worker, so candidate
 imports and global state never enter the long-lived controller.
 
+Experimental [hidden-width reduction](docs/shape-reduction.md) can run CPU workflow checks on
+smaller models after original-shape checks pass. It is disabled by default and reports reduced
+execution explicitly; full-width numerical behavior still requires validation.
+Supported reductions include PyTorch Transformer feed-forward widths and Hugging Face Mamba-1
+CPU expansions. Unsupported layers retain the entire original model; see the
+[architecture coverage and limits](docs/shape-reduction.md#transformer-and-mamba-coverage).
+The [adversarial audit](docs/shape-reduction-audit.md) tracks reduction blind spots and
+regression coverage using the automatic arm only.
+
 ## Outcomes and exit codes
 
 | Outcome | Exit | Meaning |

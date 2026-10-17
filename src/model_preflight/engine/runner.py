@@ -21,7 +21,7 @@ from model_preflight.engine.cache import ResultCache, cache_key
 from model_preflight.engine.registry import STAGE_ORDER, validate_stage_names
 from model_preflight.engine.stage import combine_stage_results
 from model_preflight.execution.subprocess_runner import SubprocessRunner
-from model_preflight.execution.worker_protocol import WorkerRequest
+from model_preflight.execution.worker_protocol import SHAPE_REDUCER_REVISION, WorkerRequest
 from model_preflight.manifest.models import Manifest
 from model_preflight.version import __version__
 
@@ -92,16 +92,34 @@ class PreflightRunner:
         self.subprocess = SubprocessRunner(manifest.execution)
 
     def _worker(
-        self, stage: StageName, scenario: dict[str, Any], timeout: float
+        self, stage: StageName, scenario: dict[str, Any], timeout: float,
+        *, reduction_allowed: bool = False,
     ) -> StageResult:
-        return self.subprocess.run(
+        result = self.subprocess.run(
             WorkerRequest(
                 stage=stage.value,
                 manifest=self.manifest.to_dict(),
                 scenario=scenario,
+                shape_reduction_allowed=reduction_allowed,
             ),
             timeout,
         )
+        reduction = result.evidence.get("shape_reduction")
+        if (
+            reduction_allowed and result.status is not StageStatus.PASS
+            and (reduction is None or reduction.get("applied", False))
+        ):
+            original = self._worker(stage, scenario, timeout)
+            original.evidence["reduction_attempt"] = result.to_dict()
+            original.evidence["shape_reduction"] = {
+                **original.evidence.get("shape_reduction", {}),
+                "applied": False,
+                "execution_model": "original",
+                "reason": "original_width_retry",
+            }
+            original.duration_seconds += result.duration_seconds
+            return original
+        return result
 
     def _cache_inputs(self) -> dict[str, Any]:
         return {
@@ -112,6 +130,7 @@ class PreflightRunner:
             "torch_version": _distribution_version("torch"),
             "profile": self.profile,
             "stages": sorted(self.only),
+            "shape_reducer_revision": SHAPE_REDUCER_REVISION,
         }
 
     def run(self) -> PreflightReport:
@@ -187,6 +206,14 @@ class PreflightRunner:
                 stages.append(result)
                 by_name[result.name] = result
 
+            reduction_allowed = (
+                self.manifest.execution.shape_reduction.mode == "auto"
+                and StageName.STATIC_SOURCE.value in by_name
+                and all(
+                    name in by_name and by_name[name].status is StageStatus.PASS
+                    for name in ("construction", "data_contract", "abstract_forward")
+                )
+            )
             if StageName.CPU_TRAINING.value in self.only:
                 cpu_scenarios = self.manifest.scenarios.cpu_scenarios()
                 if self.manifest.task.drop_last:
@@ -196,6 +223,7 @@ class PreflightRunner:
                         StageName.CPU_TRAINING,
                         scenario,
                         self.manifest.execution.cpu_timeout_seconds,
+                        reduction_allowed=reduction_allowed,
                     )
                     for scenario in cpu_scenarios
                 ]
@@ -210,6 +238,7 @@ class PreflightRunner:
                         StageName.VALIDATION,
                         validation_scenario,
                         self.manifest.execution.cpu_timeout_seconds,
+                        reduction_allowed=reduction_allowed,
                     )
                 else:
                     result = _skipped(
@@ -257,6 +286,11 @@ class PreflightRunner:
         status = status_from_diagnostics(diagnostics)
         gpu_check_required = any(
             item.classification is Classification.INCONCLUSIVE for item in diagnostics
+        )
+        gpu_check_required = gpu_check_required or any(
+            evidence.get("shape_reduction", {}).get("applied", False)
+            for stage in stages
+            for evidence in stage.evidence.get("scenarios", [stage.evidence])
         )
         recommendation = submission_recommendation(status, self.manifest.policy.mode)
         memory = by_name.get(StageName.MEMORY.value)

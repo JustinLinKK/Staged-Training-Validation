@@ -80,7 +80,17 @@
         "maximum_output_bytes": {"type": "integer", "minimum": 1024, "default": 1000000},
         "disable_network": {"type": "boolean", "default": true},
         "allow_real_cpu_abstract_fallback": {"type": "boolean", "default": false},
-        "cache": {"type": "boolean", "default": false}
+        "cache": {"type": "boolean", "default": false},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "shape_reduction": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"enum": ["off", "auto"], "default": "off"},
+            "width_factor": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.5},
+            "minimum_width": {"type": "integer", "minimum": 8, "multipleOf": 8, "default": 16}
+          }
+        }
       }
     },
     "policy": {

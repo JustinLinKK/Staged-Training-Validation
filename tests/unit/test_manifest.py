@@ -69,3 +69,33 @@ target:
     with pytest.raises(ManifestError, match="surprise"):
         load_manifest(path)
 
+
+
+@pytest.mark.parametrize("settings", [
+    {"shape_reduction": {"mode": "unknown"}},
+    {"shape_reduction": {"width_factor": 0}},
+    {"shape_reduction": {"width_factor": 1}},
+    {"shape_reduction": {"minimum_width": 15}},
+    {"shape_reduction": {"surprise": True}},
+    {"seed": -1},
+])
+def test_invalid_reduction_settings_rejected(tmp_path: Path, settings: dict) -> None:
+    import yaml
+
+    raw = yaml.safe_load((FIXTURES / "valid.yaml").read_text())
+    raw["candidate"]["root"] = str(FIXTURES / "valid_candidate")
+    raw["execution"].update(settings)
+    path = tmp_path / "preflight.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ManifestError):
+        load_manifest(path)
+
+
+def test_reduction_defaults_and_seed_round_trip() -> None:
+    from dataclasses import replace
+
+    manifest = load_manifest(FIXTURES / "valid.yaml")
+    assert manifest.execution.shape_reduction.mode == "off"
+    assert "seed" not in manifest.to_dict()["execution"]
+    seeded = replace(manifest, execution=replace(manifest.execution, seed=123))
+    assert seeded.to_dict()["execution"]["seed"] == 123

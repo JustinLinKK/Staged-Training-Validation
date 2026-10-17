@@ -100,6 +100,9 @@ class SubprocessRunner:
                     maximum_output_bytes=self.execution.maximum_output_bytes,
                 )
 
+            environment = _safe_environment(temp_dir, self.execution.disable_network)
+            if self.execution.seed is not None:
+                environment["PYTHONHASHSEED"] = str(self.execution.seed)
             process = subprocess.Popen(
                 command,
                 stdin=subprocess.PIPE,
@@ -107,7 +110,7 @@ class SubprocessRunner:
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=temp_dir,
-                env=_safe_environment(temp_dir, self.execution.disable_network),
+                env=environment,
                 start_new_session=True,
                 preexec_fn=set_limits,
             )

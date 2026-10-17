@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import resource
 import sys
 import tempfile
+import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -75,6 +78,8 @@ def _construct(
     *,
     optimizer: bool,
     device: str = "cpu",
+    runtime_evidence: dict[str, Any] | None = None,
+    reduction_allowed: bool = False,
 ) -> tuple[Any, Any, Any | None, dict[str, Any]]:
     import torch
 
@@ -87,6 +92,18 @@ def _construct(
             f"build_model returned {type(model).__name__}, expected torch.nn.Module",
             {"returned_type": type(model).__name__},
         )
+    if runtime_evidence is not None:
+        settings = manifest["execution"].get("shape_reduction", {"mode": "off"})
+        if reduction_allowed and settings["mode"] == "auto":
+            from model_preflight.execution.shape_reduction import reduce_model
+
+            runtime_evidence["shape_reduction"] = reduce_model(model, adapter, context, settings)
+        else:
+            runtime_evidence["shape_reduction"] = {
+                "applied": False,
+                "execution_model": "original",
+                "reason": "off" if settings["mode"] == "off" else "prerequisites_not_passed",
+            }
     parameters = list(model.parameters())
     trainable = [parameter for parameter in parameters if parameter.requires_grad]
     if not trainable:
@@ -327,6 +344,12 @@ def _data_stage(manifest: dict[str, Any], scenario: dict[str, Any]) -> dict[str,
 def _check_tensor_finite(value: Any, code: str, message: str) -> None:
     import torch
 
+    if isinstance(value, dict):
+        for item in value.values():
+            _check_tensor_finite(item, code, message)
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            _check_tensor_finite(item, code, message)
     if isinstance(value, torch.Tensor) and not bool(torch.isfinite(value).all().item()):
         raise ConfirmedFailure(
             code,
@@ -336,12 +359,14 @@ def _check_tensor_finite(value: Any, code: str, message: str) -> None:
 
 
 def _cpu_training_stage(
-    manifest: dict[str, Any], scenario: dict[str, Any]
+    manifest: dict[str, Any], scenario: dict[str, Any],
+    runtime_evidence: dict[str, Any] | None = None, reduction_allowed: bool = False,
 ) -> dict[str, Any]:
     import torch
 
     adapter, model, optimizer, evidence = _construct(
-        manifest, scenario, optimizer=True
+        manifest, scenario, optimizer=True, runtime_evidence=runtime_evidence,
+        reduction_allowed=reduction_allowed,
     )
     assert optimizer is not None
     batch = _build_batch(adapter, manifest, scenario, "cpu")
@@ -353,6 +378,7 @@ def _cpu_training_stage(
     output_handle = model.register_forward_hook(
         lambda _module, _inputs, output: captured_outputs.append(output)
     )
+    execution_started = time.monotonic()
     try:
         for _ in range(steps):
             captured_outputs.clear()
@@ -420,9 +446,16 @@ def _cpu_training_stage(
                         {"parameter": name, "shape": list(parameter.shape)},
                     )
             _candidate_call("optimizer_step", optimizer.step)
+            for name, parameter in model.named_parameters():
+                _check_tensor_finite(
+                    parameter, "NUM001", f"parameter {name} is non-finite after optimizer step"
+                )
+            _check_tensor_finite(optimizer.state, "NUM001", "optimizer state is non-finite")
             final_loss = float(loss.detach().cpu().item())
     finally:
         output_handle.remove()
+        if runtime_evidence is not None:
+            runtime_evidence["workflow_seconds"] = time.monotonic() - execution_started
     evidence.update(
         {
             "loss": final_loss,
@@ -435,17 +468,22 @@ def _cpu_training_stage(
 
 
 def _validation_stage(
-    manifest: dict[str, Any], scenario: dict[str, Any]
+    manifest: dict[str, Any], scenario: dict[str, Any],
+    runtime_evidence: dict[str, Any] | None = None, reduction_allowed: bool = False,
 ) -> dict[str, Any]:
     import torch
 
-    adapter, model, _, evidence = _construct(manifest, scenario, optimizer=False)
+    adapter, model, _, evidence = _construct(
+        manifest, scenario, optimizer=False, runtime_evidence=runtime_evidence,
+        reduction_allowed=reduction_allowed,
+    )
     validation_step = getattr(adapter, "validation_step", None)
     if not callable(validation_step):
         raise ConfirmedFailure("VAL001", "adapter does not define validation_step", {})
     batch = _build_batch(adapter, manifest, scenario, "cpu", validation=True)
     _validate_batch(batch, manifest)
     _candidate_call("validation", model.eval)
+    execution_started = time.monotonic()
     with torch.no_grad():
         output = _candidate_call(
             "validation",
@@ -454,11 +492,12 @@ def _validation_stage(
             batch,
             _context(manifest, scenario, "cpu"),
         )
-    if isinstance(output, torch.Tensor):
-        _check_tensor_finite(output, "NUM001", "validation output is non-finite")
+    _check_tensor_finite(output, "NUM001", "validation output is non-finite")
     _validate_output_contract(output, manifest)
     evidence["batch"] = _describe(batch)
     evidence["validation_output"] = _describe(output)
+    if runtime_evidence is not None:
+        runtime_evidence["workflow_seconds"] = time.monotonic() - execution_started
     return evidence
 
 
@@ -824,6 +863,20 @@ def _run(request: dict[str, Any]) -> WorkerResponse:
     stage = str(request["stage"])
     manifest = dict(request["manifest"])
     scenario = dict(request.get("scenario", {}))
+    seed = manifest["execution"].get("seed")
+    if seed is not None:
+        import torch
+
+        random.seed(seed)
+        torch.manual_seed(seed)
+        try:
+            import numpy as np
+        except ImportError:
+            pass
+        else:
+            np.random.seed(seed)
+    runtime_evidence: dict[str, Any] = {}
+    reduction_allowed = bool(request.get("shape_reduction_allowed", False))
     handlers: dict[str, Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = {
         StageName.CONSTRUCTION.value: _construct_stage,
         StageName.DATA_CONTRACT.value: _data_stage,
@@ -834,14 +887,21 @@ def _run(request: dict[str, Any]) -> WorkerResponse:
     if stage not in handlers:
         raise ValueError(f"unknown worker stage: {stage}")
     try:
-        evidence = handlers[stage](manifest, scenario)
+        if stage in {StageName.CPU_TRAINING.value, StageName.VALIDATION.value}:
+            handler = (
+                _cpu_training_stage if stage == StageName.CPU_TRAINING.value else _validation_stage
+            )
+            evidence = handler(manifest, scenario, runtime_evidence, reduction_allowed)
+            evidence.update(runtime_evidence)
+        else:
+            evidence = handlers[stage](manifest, scenario)
         return WorkerResponse(status=StageStatus.PASS.value, diagnostics=[], evidence=evidence)
     except ConfirmedFailure as failure:
         diagnostic = _failure_diagnostic(stage, failure, scenario)
         return WorkerResponse(
             status=StageStatus.FAIL.value,
             diagnostics=[diagnostic.to_dict()],
-            evidence={},
+            evidence=runtime_evidence,
         )
     except CandidateRaised as raised:
         diagnostic = _raised_diagnostic(stage, raised, scenario)
@@ -853,7 +913,7 @@ def _run(request: dict[str, Any]) -> WorkerResponse:
         return WorkerResponse(
             status=status.value,
             diagnostics=[diagnostic.to_dict()],
-            evidence={},
+            evidence=runtime_evidence,
         )
 
 
@@ -889,6 +949,7 @@ def main() -> None:
     if os.environ.get("MODEL_PREFLIGHT_DISABLE_NETWORK") == "1":
         sys.addaudithook(_block_network)
     try:
+        started = time.monotonic()
         response = _run(request)
     except BaseException as exc:
         diagnostic = Diagnostic(
@@ -905,6 +966,12 @@ def main() -> None:
             diagnostics=[diagnostic.to_dict()],
             evidence={},
         )
+    response.evidence.update({
+        "worker_execution_seconds": time.monotonic() - started,
+        "peak_worker_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (
+            1 if sys.platform == "darwin" else 1024
+        ),
+    })
     response = WorkerResponse(
         status=response.status,
         diagnostics=response.diagnostics,

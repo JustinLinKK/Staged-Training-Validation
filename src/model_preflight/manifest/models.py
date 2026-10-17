@@ -87,6 +87,13 @@ class TargetConfig:
 
 
 @dataclass(frozen=True)
+class ShapeReductionConfig:
+    mode: str = "off"
+    width_factor: float = 0.5
+    minimum_width: int = 16
+
+
+@dataclass(frozen=True)
 class ExecutionConfig:
     abstract_timeout_seconds: float = 30.0
     cpu_timeout_seconds: float = 90.0
@@ -96,6 +103,8 @@ class ExecutionConfig:
     disable_network: bool = True
     allow_real_cpu_abstract_fallback: bool = False
     cache: bool = False
+    shape_reduction: ShapeReductionConfig = field(default_factory=ShapeReductionConfig)
+    seed: int | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +178,12 @@ class Manifest:
                     self.execution.allow_real_cpu_abstract_fallback
                 ),
                 "cache": self.execution.cache,
+                "shape_reduction": {
+                    "mode": self.execution.shape_reduction.mode,
+                    "width_factor": self.execution.shape_reduction.width_factor,
+                    "minimum_width": self.execution.shape_reduction.minimum_width,
+                },
+                **({"seed": self.execution.seed} if self.execution.seed is not None else {}),
             },
             "policy": {
                 key: value
