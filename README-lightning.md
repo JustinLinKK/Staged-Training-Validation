@@ -22,12 +22,20 @@ class hierarchy or scheduler implementation.
 
 For the Lightning ML-Master and MLEvolve adapters, set `LIGHTNING_PLUGINS` to
 include `preflight,scheduler`, set `LIGHTNING_PREFLIGHT_DOCKER_IMAGE` to the
-built image, and opt in with `LIGHTNING_PREFLIGHT_SPECULATIVE=1`. Supply a
+built image, and opt in with `LIGHTNING_PREFLIGHT_SPECULATIVE=1`. Also set
+`LIGHTNING_PREFLIGHT_CPU_PROBE_IMAGE` to a trusted image containing the
+candidate's CPU dependencies. Without this image, speculative admission is
+rejected **before** submitting a scheduler job. Supply a
 trusted, JSON-encoded argument vector in
 `LIGHTNING_PREFLIGHT_CPU_PROBE_ARGV`, containing `{script_path}` and
-`{epochs}` placeholders. `{working_directory}` and `{node_id}` are optional.
-The adapter launches this command with `CUDA_VISIBLE_DEVICES=-1`,
-`NVIDIA_VISIBLE_DEVICES=void`, and `LIGHTNING_CPU_EPOCHS=2`; no shell is used.
+`{epochs}` placeholders. `{working_directory}`, `{scratch_directory}`, and
+`{node_id}` are optional. The adapter launches this command **inside** the
+CPU probe image with no network or GPU, a read-only candidate mount at
+`/candidate`, a read-only checker mount at `/checker`, and writable temporary
+storage at `/scratch` and `/tmp`; no shell is used. `{script_path}` resolves
+inside `/candidate`, `{working_directory}` is `/candidate`, and
+`{scratch_directory}` is `/scratch`. It sets `CUDA_VISIBLE_DEVICES=-1`,
+`NVIDIA_VISIBLE_DEVICES=void`, and `LIGHTNING_CPU_EPOCHS=2` in the container.
 The command must run the actual candidate training path on a representative
 CPU fixture and print a final JSON line:
 
@@ -35,10 +43,13 @@ CPU fixture and print a final JSON line:
 {"status":"passed","epochs_completed":2,"losses":[1.3,1.1]}
 ```
 
-The adapter, not this generic plugin, is responsible for enforcing that two
-full epochs actually ran and for isolating untrusted candidate code in its
-own CPU container or restricted user. A bare success assertion is not proof
-of training correctness. An explicit `{"status":"failed", "bug_confirmed":true}`
+The task-specific adapter is responsible for using a representative fixture
+and proving that its epoch hook really exercises training. The plugin now
+isolates that hook in its own CPU container, but a bare success assertion is
+still not proof of training correctness. Candidate code must write temporary
+outputs to `/scratch`, not the read-only fixture. Read-only mount and scratch
+capacity errors are inconclusive, not candidate bugs. An explicit
+`{"status":"failed", "bug_confirmed":true}`
 is a confirmed candidate defect and cancels its provisional scheduler job.
 Timeout, missing evidence, or infrastructure failure is **inconclusive** and
 does not blame the candidate or cancel the job. The scheduler may begin or

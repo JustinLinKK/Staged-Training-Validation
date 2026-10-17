@@ -15,6 +15,7 @@ import os
 import signal
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -126,7 +127,18 @@ class ProbeSpec:
 
 
 def probe_from_environment(script_path: Path, working_directory: Path, node_id: str) -> ProbeSpec:
-    """Resolve a trusted adapter command; never invoke a shell or candidate text."""
+    """Run a trusted probe command in a CPU-only container, never on the host."""
+    image = os.environ.get("LIGHTNING_PREFLIGHT_CPU_PROBE_IMAGE", "").strip()
+    if not image:
+        raise ValueError("LIGHTNING_PREFLIGHT_CPU_PROBE_IMAGE is required for isolated CPU probing")
+    workspace = Path(working_directory).resolve()
+    candidate = Path(script_path).resolve()
+    if not workspace.is_dir() or not candidate.is_file():
+        raise ValueError("CPU probe workspace and candidate script must exist")
+    try:
+        candidate_relative = candidate.relative_to(workspace)
+    except ValueError as exc:
+        raise ValueError("CPU probe candidate must be inside the read-only workspace") from exc
     raw = os.environ.get("LIGHTNING_PREFLIGHT_CPU_PROBE_ARGV")
     if not raw:
         raise ValueError("LIGHTNING_PREFLIGHT_CPU_PROBE_ARGV is required")
@@ -141,8 +153,9 @@ def probe_from_environment(script_path: Path, working_directory: Path, node_id: 
     if not any("{epochs}" in item for item in template):
         raise ValueError("CPU probe command must include {epochs}")
     replacements = {
-        "{script_path}": str(Path(script_path).resolve()),
-        "{working_directory}": str(Path(working_directory).resolve()),
+        "{script_path}": str(Path("/candidate") / candidate_relative),
+        "{working_directory}": "/candidate",
+        "{scratch_directory}": "/scratch",
         "{node_id}": str(node_id),
         "{epochs}": "2",
     }
@@ -152,7 +165,24 @@ def probe_from_environment(script_path: Path, working_directory: Path, node_id: 
             item = item.replace(key, value)
         argv.append(item)
     timeout = int(os.environ.get("LIGHTNING_PREFLIGHT_CPU_PROBE_TIMEOUT", "300"))
-    return ProbeSpec(tuple(argv), Path(working_directory).resolve(), timeout)
+    if timeout <= 0:
+        raise ValueError("CPU probe timeout must be positive")
+    checker_root = Path(__file__).resolve().parent
+    command = [
+        "docker", "run", "--rm", "--name", f"preflight-probe-{uuid.uuid4().hex}",
+        "-i", "--network", "none", "--read-only",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+        "--pids-limit", "64", "--memory", "2g", "--cpus", "2",
+        "--user", "10001:10001", "--workdir", "/scratch",
+        "--tmpfs", "/scratch:rw,nosuid,nodev,size=512m,mode=1777",
+        "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m,mode=1777",
+        "--mount", f"type=bind,src={workspace},dst=/candidate,readonly",
+        "--mount", f"type=bind,src={checker_root},dst=/checker,readonly",
+        "--env", "CUDA_VISIBLE_DEVICES=-1", "--env", "NVIDIA_VISIBLE_DEVICES=void",
+        "--env", "LIGHTNING_CPU_EPOCHS=2", "--entrypoint", argv[0],
+        image, *argv[1:],
+    ]
+    return ProbeSpec(tuple(command), workspace, timeout)
 
 
 def _cpu_probe(spec: ProbeSpec) -> dict[str, Any]:
@@ -172,7 +202,19 @@ def _cpu_probe(spec: ProbeSpec) -> dict[str, Any]:
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.communicate()
-        return {"status": "failed", "reason": "timeout"}
+        cleanup = "not_applicable"
+        if spec.argv[:2] == ("docker", "run") and "--name" in spec.argv:
+            index = spec.argv.index("--name")
+            if index + 1 < len(spec.argv):
+                try:
+                    removed = subprocess.run(
+                        ["docker", "rm", "-f", spec.argv[index + 1]],
+                        capture_output=True, text=True, timeout=15, check=False,
+                    )
+                    cleanup = "removed" if removed.returncode == 0 else "failed"
+                except (OSError, subprocess.TimeoutExpired):
+                    cleanup = "failed"
+        return {"status": "failed", "reason": "timeout", "container_cleanup": cleanup}
     if process.returncode != 0:
         return {"status": "failed", "reason": "nonzero_exit", "exit_code": process.returncode,
                 "stderr_tail": stderr[-2000:]}
@@ -245,6 +287,8 @@ def submit_with_speculation(
         return client.submit(job), None
     if static_report is None or not static_report.get("admitted"):
         raise ValueError("speculative admission requires a successful static report")
+    if not os.environ.get("LIGHTNING_PREFLIGHT_CPU_PROBE_IMAGE", "").strip():
+        raise ValueError("LIGHTNING_PREFLIGHT_CPU_PROBE_IMAGE is required for isolated CPU probing")
     probe = probe_from_environment(script_path, workspace, node_id)
     submitted: list[Any] = []
 

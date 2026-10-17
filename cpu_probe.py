@@ -7,6 +7,7 @@ adapter contract, not a security sandbox or a universal training-script parser.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
 import os
@@ -42,8 +43,12 @@ def main() -> int:
             loss = float(train_epoch(epoch, args.fixture_root.resolve()))
             if not math.isfinite(loss):
                 raise ValueError("non-finite loss")
-        except Exception:
-            print(json.dumps({"status": "failed", "bug_confirmed": True,
+        except Exception as exc:
+            fixture_or_scratch_error = isinstance(exc, PermissionError) or (
+                isinstance(exc, OSError) and exc.errno in {errno.EROFS, errno.ENOSPC}
+            )
+            print(json.dumps({"status": "inconclusive" if fixture_or_scratch_error else "failed",
+                              "bug_confirmed": not fixture_or_scratch_error,
                               "epochs_completed": epoch,
                               "traceback": traceback.format_exc()[-4000:]}))
             return 0
