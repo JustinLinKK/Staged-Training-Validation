@@ -1,5 +1,8 @@
 # Model Preflight: Standalone Repository Implementation Plan
 
+Historical design document. For the released interface and measured limitations, start at
+the [documentation wiki](../README.md) and [paper release](../paper-release.md).
+
 ## 1. Mission
 
 Build a new standalone repository, working name `model-preflight`, that determines whether an agent-generated PyTorch training candidate is sufficiently valid to justify submitting a GPU job.

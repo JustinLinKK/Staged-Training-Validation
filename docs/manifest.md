@@ -23,6 +23,54 @@ selects a custom profile relative to the manifest.
 `memory_failure_fraction` is optional. Crossing it remains an inconclusive estimate—not a
 confirmed defect—but recommends blocking in balanced/strict modes.
 
+## Example configuration
+
+```yaml
+schema_version: 1
+candidate:
+  id: candidate_0182
+  root: ./candidate
+  adapter: preflight_adapter:CandidateAdapter
+task:
+  name: image_classification
+  fixture_root: ./fixtures
+  num_classes: 2
+  target_dtype: int64
+  input_rank: 3
+  output_class_dimension: -1
+scenarios:
+  train_batch_sizes: [8, 16, 32, 64, 128]
+  test_last_batch: true
+  last_batch_size: 1
+  run_validation: true
+  input_shapes:
+    normal: [3, 96, 96]
+  boundary_shapes:
+    wide: [3, 96, 128]
+  precision: [fp32, fp16]
+target:
+  profile: nvidia/v100_32gb
+execution:
+  abstract_timeout_seconds: 30
+  cpu_timeout_seconds: 90
+  maximum_cpu_memory_mb: 8192
+  maximum_processes: 32
+  maximum_output_bytes: 1000000
+  disable_network: true
+  allow_real_cpu_abstract_fallback: false
+  cache: false
+  max_workers: 1
+  cpu_threads: 1
+  shape_reduction:
+    mode: off
+policy:
+  mode: balanced
+```
+
+For a runnable synthetic fixture, use [the included example](../examples/image_classification/preflight.yaml).
+The adapter must supply data matching the declared shapes. Optional dependencies and fixtures
+remain the caller's responsibility.
+
 ## Parallel execution
 
 ```yaml

@@ -1,21 +1,35 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "model-preflight"
-version = "0.1.0"
+dynamic = ["version"]
 description = "CPU-first preflight checks for agent-generated PyTorch training candidates"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Model Preflight contributors" }]
+keywords = ["pytorch", "preflight", "model-validation", "machine-learning"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
   "jsonschema>=4.18",
   "PyYAML>=6.0",
   "torch>=2.2",
 ]
+
+[project.urls]
+Repository = "https://github.com/JustinLinKK/nn-model-preflight-checker"
+Documentation = "https://github.com/JustinLinKK/nn-model-preflight-checker/blob/main/docs/README.md"
+Issues = "https://github.com/JustinLinKK/nn-model-preflight-checker/issues"
+Changelog = "https://github.com/JustinLinKK/nn-model-preflight-checker/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -40,8 +54,12 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.dynamic]
+version = { attr = "model_preflight.version.__version__" }
+
 [tool.setuptools.package-data]
 model_preflight = [
+  "py.typed",
   "manifest/*.json",
   "reporting/*.json",
   "profiles/*.json",

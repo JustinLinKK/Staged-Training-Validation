@@ -1,216 +1,143 @@
 # Model Preflight
 
-Model Preflight decides whether an agent-generated PyTorch training candidate is worth a
-GPU job. It performs conservative source checks in the controller, then imports and executes
-candidate code only in fresh, resource-bounded worker processes.
+CPU-first preflight checks for generated PyTorch training candidates. Give the checker a
+candidate manifest and a small representative fixture; receive a structured diagnostic report
+before spending a full GPU allocation.
 
-A `PASS` means the configured CPU checks passed. It does **not** prove CUDA correctness,
-mixed-precision stability, GPU memory feasibility, custom-kernel behavior, MPS, streams,
-NCCL, DDP, or concurrent execution. Keep a short target-GPU canary at the start of the real
-training job.
+**Paper software release: v0.2.0.** Install from this repository or a built wheel. This project
+is not published to PyPI; the public `model-preflight` PyPI project is unrelated.
 
-## Quickstart
+[Documentation wiki](docs/README.md) · [Installation](docs/installation.md) ·
+[Agent integration](docs/agent-integration.md) · [Paper release and evidence](docs/paper-release.md) ·
+[Changelog](CHANGELOG.md)
 
-Create and activate the dedicated environment:
+## Install
 
-```bash
-conda env create -f environment.yml
-conda activate model-preflight
-```
-
-For the environment already created in this checkout, install/update the editable package:
+Use Python 3.10+ on Linux or WSL2, preferably in a virtual environment. From a clone:
 
 ```bash
-conda activate model-preflight
-python -m pip install -e '.[dev]'
+git clone https://github.com/JustinLinKK/nn-model-preflight-checker.git
+cd nn-model-preflight-checker
+git checkout v0.2.0
+python -m pip install .
 ```
 
-Run the included example:
+Or install the paper release directly, without managing a checkout:
 
 ```bash
-model-preflight check examples/image_classification/preflight.yaml \
-  --report report.json \
-  --junit report.xml
+python -m pip install "git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.0"
 ```
 
-Run an individual stage while repairing a candidate:
+A compatible PyTorch installation is reused. For a new CPU-only environment, install PyTorch
+from its CPU index before installing this package; see [installation options](docs/installation.md).
+Candidate-specific dependencies are supplied by the calling environment.
+
+## Run a check
+
+From the repository, run the included synthetic example:
 
 ```bash
-model-preflight check preflight.yaml --only abstract_forward --report report.json
+model-preflight check examples/image_classification/preflight.yaml --report report.json
 ```
 
-The Python API returns the same report model:
+From any installed environment, use your own manifest:
 
 ```python
 from model_preflight import check
 
 report = check("preflight.yaml")
-print(report.overall_status, report.gpu_submission_recommended)
+print(report.overall_status.value)
+print(report.gpu_submission_recommended)
 ```
 
-For speculative scheduling, use `model-preflight check preflight.yaml --format events`.
-It flushes a `STATIC_PASS` JSON event after source checks, then a terminal result after the
-complete CPU workflow. The framework can queue the candidate while that worker continues.
-For trusted local use, `from model_preflight import submit` provides the same behavior through
-a background future. See [agent integration](docs/agent-integration.md) for CPU container
-deployment, event handling, and late rejection. A provisional pass is not a final admission.
+The manifest names a `module:CandidateAdapter`; the adapter builds the model, optimizer,
+training/validation batches, and real loss. See the [adapter contract](docs/adapter-api.md) and
+[manifest reference](docs/manifest.md). Runtime imports and execution stay in fresh worker
+processes. The controller never imports candidate code.
 
-## Checks
-
-The default pipeline runs:
-
-1. `static_source`: syntax, entry-module presence, device hard-coding, hard-coded batch
-   dimensions, CUDA-only packages/branches, streams, distributed APIs, and custom extensions.
-2. `hardware`: requested precision against a versioned target profile.
-3. `construction`: adapter import, `nn.Module` construction, trainable parameters, optimizer
-   type, parameter ownership, and non-empty groups.
-4. `data_contract`: a representative batch from the adapter's real fixture/data hook, with
-   optional input-rank and target-dtype contracts.
-5. `abstract_forward`: every configured batch size, normal/boundary shape, and precision using
-   `torch.export` when available plus a meta-tensor execution fallback. Export failure alone is
-   never a candidate failure.
-6. `cpu_training`: real scalar finite loss, backward, required/available gradients, finite
-   gradients, optimizer step, optional second stateful step, normal batch, and partial final
-   batch where applicable.
-7. `validation`: `eval()` plus `no_grad()` through the configured validation data and step.
-8. `memory`: exact parameter/gradient bytes plus explicitly labeled optimizer, saved-activation,
-   and safety-margin estimates.
-
-Every stage records scenario evidence. All runtime stages use a fresh worker, so candidate
-imports and global state never enter the long-lived controller.
-
-Experimental [hidden-width reduction](docs/shape-reduction.md) can run CPU workflow checks on
-smaller models after original-shape checks pass. It is disabled by default and reports reduced
-execution explicitly; full-width numerical behavior still requires validation.
-Supported reductions include PyTorch Transformer feed-forward widths and Hugging Face Mamba-1
-CPU expansions. Unsupported layers retain the entire original model; see the
-[architecture coverage and limits](docs/shape-reduction.md#transformer-and-mamba-coverage).
-The [adversarial audit](docs/shape-reduction-audit.md) tracks reduction blind spots and
-regression coverage using the automatic arm only.
-
-## Outcomes and exit codes
-
-| Outcome | Exit | Meaning |
-|---|---:|---|
-| `PASS` | 0 | Every selected required CPU check passed. |
-| `FAIL` | 10 | A candidate defect was reproduced. |
-| `INCONCLUSIVE` | 20 | A property could not be checked, such as a timeout or missing meta kernel. |
-| invalid manifest/profile | 30 | Input contract failed before candidate execution. |
-| `INTERNAL_ERROR` | 40 | The checker/worker protocol failed; this is never a candidate defect. |
-
-Policy modes change only the scheduling recommendation:
-
-- `audit` never recommends blocking a submission.
-- `balanced` blocks confirmed failures and allows inconclusive results with
-  `GPU_CHECK_REQUIRED`.
-- `strict` recommends submission only for `PASS`.
-
-## Candidate adapter
-
-The manifest names an explicit `module:attribute`; Model Preflight does not guess training entry
-points. The object must implement:
+## Speculative integration
 
 ```python
-class CandidateAdapter:
-    def build_model(self, context): ...
-    def build_optimizer(self, model, context): ...
-    def build_train_batch(self, scenario, device): ...
-    def build_validation_batch(self, scenario, device): ...
-    def training_step(self, model, batch, context): ...  # scalar loss tensor
-    def validation_step(self, model, batch, context): ...
+from model_preflight import submit
+
+submission = submit("preflight.yaml")
+print(submission.initial.status)  # STATIC_PASS, or an immediate terminal rejection
+# The framework can queue the candidate and continue working here.
+current = submission.poll()      # nonblocking
+final = submission.completion.result()  # wait only when the final decision is needed
 ```
 
-The batch builders must use the real transform/tokenizer/dataset/collate path wherever one
-exists. They receive `"cpu"` for real checks and `"meta"` for abstract checks. An optional
-`required_gradient_names(model)` method can identify parameters that must receive a gradient.
-See [docs/adapter-api.md](docs/adapter-api.md).
+For CPU container workers, stream the same lifecycle as JSON lines:
 
-## Manifest
+```bash
+model-preflight check preflight.yaml --format events
+```
+
+`STATIC_PASS` is provisional. The complete workflow later returns `FULL_PASS`, `FAIL`,
+`INCONCLUSIVE`, or `INTERNAL_ERROR`. The framework correlates request IDs with scheduler job
+IDs and handles late rejection. [Integration details](docs/agent-integration.md) cover Docker,
+immutable inputs, lost workers, and queue policy. Local package use avoids launching a Docker
+container per request; PyTorch worker startup and simulation costs remain.
+
+## Checking pipeline and options
+
+The full pipeline runs source and hardware checks, original-width construction and data
+contracts, all original-shape abstract scenarios, CPU training/backward/optimizer checks,
+validation, and an original-model memory estimate. See [architecture](docs/architecture.md).
 
 ```yaml
-schema_version: 1
-candidate:
-  id: candidate_0182
-  root: ./candidate
-  adapter: preflight_adapter:CandidateAdapter
-task:
-  name: image_classification
-  fixture_root: ./fixtures
-  num_classes: 2
-  target_dtype: int64
-  input_rank: 3
-  output_class_dimension: -1
-scenarios:
-  train_batch_sizes: [8, 16, 32, 64, 128]
-  test_last_batch: true
-  last_batch_size: 1
-  run_validation: true
-  input_shapes:
-    normal: [3, 96, 96]
-  boundary_shapes:
-    wide: [3, 96, 128]
-  precision: [fp32, fp16]
-target:
-  profile: nvidia/v100_32gb
 execution:
-  abstract_timeout_seconds: 30
-  cpu_timeout_seconds: 90
-  maximum_cpu_memory_mb: 8192
-  maximum_processes: 32
-  maximum_output_bytes: 1000000
-  disable_network: true
-  allow_real_cpu_abstract_fallback: false
-  cache: false
-  max_workers: 1
+  max_workers: 4
   cpu_threads: 1
-policy:
-  mode: balanced
+  shape_reduction:
+    mode: off
 ```
 
-Relative paths resolve against the manifest directory. Unknown versions and fields are rejected
-before execution. See [docs/manifest.md](docs/manifest.md) and the packaged JSON Schema.
+Concurrency is optional; both worker and thread counts default to one. Experimental
+[shape reduction](docs/shape-reduction.md) can shrink supported hidden widths after original-shape
+checks pass. It includes eligible Transformer feed-forward and Mamba-1 CPU paths. Unsupported
+structures retain original width. Reduction is **disabled by default**, and reduced success
+still requires original-width numerical validation.
 
-For multicore checking, set `execution.max_workers: 4` to run independent abstract and CPU
-training scenarios concurrently in fresh processes. `execution.cpu_threads` controls CPU
-threads inside each worker; start with `1` when running several workers. Both default to `1`.
-Original-shape checks still finish before reduced-width workflows begin. See the
-[parallel execution settings](docs/manifest.md#parallel-execution) for resource budgeting.
+| Report outcome | CLI exit | Meaning |
+|---|---:|---|
+| `PASS` | 0 | Configured required CPU checks passed. |
+| `FAIL` | 10 | A candidate defect was reproduced. |
+| `INCONCLUSIVE` | 20 | Verification could not complete or establish a property. |
+| Invalid manifest/profile | 30 | Input contract failed before candidate execution. |
+| `INTERNAL_ERROR` | 40 | Checker infrastructure failed; not candidate blame. |
 
-## Isolation
+Policy modes change scheduling recommendations: `audit` always recommends admission,
+`balanced` admits inconclusive results with a GPU-check requirement, and `strict` admits only
+`PASS`. A CPU pass does not establish CUDA correctness, GPU memory feasibility, mixed-precision
+stability, or distributed-training correctness. Keep a target-GPU canary.
 
-Local workers receive a clean temporary home, no visible CUDA device, a redacted environment,
-offline library flags, a Python network audit hook, process-group cleanup, and POSIX wall-time,
-CPU, address-space, process-count, core-dump, and file-size limits. Candidate stdout/stderr are
-captured away from the protocol.
+## Docker and trust boundary
 
-OS subprocess limits are defense in depth, not a complete sandbox against hostile native code.
-For untrusted generated code, use the CPU container with a read-only candidate mount, read-only
-root filesystem, no capabilities, a PID limit, and no network:
+Use the Python package directly for trusted local candidates. For untrusted generated code,
+keep the existing CPU container and runtime isolation controls:
 
 ```bash
 docker build -f docker/Dockerfile.cpu -t model-preflight:cpu .
-docker run --rm --network none --read-only --cap-drop ALL --pids-limit 32 \
+docker run --rm --init --network none --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --pids-limit 128 --cpus 4 --memory 4g \
   --tmpfs /tmp:rw,noexec,nosuid,size=1g \
-  -v "$PWD/examples/image_classification:/work:ro" \
-  -v "$PWD/reports:/reports:rw" \
-  model-preflight:cpu check /work/preflight.yaml --report /reports/report.json
+  --mount type=bind,src="$PWD/examples/image_classification",dst=/work,readonly \
+  model-preflight:cpu check /work/preflight.yaml --format events
 ```
 
-## Development
+Subprocess limits alone are not a sandbox against hostile native code. See the
+[security model](docs/security.md). The separate root `Dockerfile` and root compatibility
+modules serve the [Lightning integration](README-lightning.md); they retain their existing
+paths and are not the `model_preflight` package API.
 
-```bash
-conda activate model-preflight
-ruff check .
-mypy src/model_preflight
-python -m pytest
-python -m build
-```
+## Research and development
 
-The test suite includes schema/unit tests, subprocess timeout/crash isolation tests, CLI tests,
-and a mutation corpus with pre-recorded expected outcomes. Historical-corpus metrics must be
-measured with real MLEvolve artifacts using `scripts/evaluate_bug_corpus.py`; no historical
-artifacts are bundled or invented here.
+The [paper-release guide](docs/paper-release.md) separates measured results from limitations
+and links reproduction commands. Historical experiment results are not measurements of every
+later revision. In particular, the original shape-reduction acceptance gates failed; later
+auto-only audits do not establish universal numerical equivalence.
 
-Architecture, schemas, diagnostics, profiles, and integration guidance live under
-[docs/](docs/architecture.md). The honest phase-by-phase release-gate status is recorded in
-[docs/implementation-status.md](docs/implementation-status.md).
+Use [CITATION.cff](CITATION.cff) to cite the software, pin `v0.2.0` or its commit, and record the
+PyTorch version and execution settings. See [development](docs/development.md) for editable
+installation, tests, package validation, and the repository layout.

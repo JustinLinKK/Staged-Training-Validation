@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "Please cite this software version when using Model Preflight in research."
+type: software
+title: "Model Preflight: CPU-first validation for generated PyTorch training candidates"
+authors:
+  - name: "Model Preflight contributors"
+version: 0.2.0
+date-released: 2026-10-17
+license: Apache-2.0
+repository-code: "https://github.com/JustinLinKK/nn-model-preflight-checker"
+url: "https://github.com/JustinLinKK/nn-model-preflight-checker/tree/v0.2.0"

@@ -1,5 +1,7 @@
 # Width scaling and numerical fallback — 2026-10-16
 
+For release scope and availability of raw artifacts, see the [paper-release guide](paper-release.md).
+
 **The original models had too little reducible computation to cover the analysis cost.**
 Larger CNN/residual models demonstrate end-to-end acceleration, but width alone is not a
 reliable eligibility rule. The three missed runs were one overflow defect at three seeds;
@@ -69,7 +71,7 @@ bootstrap resamples of five pairs.
 | Image/tabular 256 | 8.487 | 9.098 | 0.939 [0.862, 0.964] |
 | Image/tabular 512 | 8.492 | 9.212 | 0.950 [0.899, 0.985] |
 
-![Width scaling](../.cache/shape-reduction-v3-scale/scaling.png)
+![Width scaling](figures/scaling.png)
 
 The original MLP-2048 workflow consumed only about 0.147 seconds of an 8.286-second check.
 Even removing all of that computation could save only about 1.8%, before adding reducer
@@ -120,9 +122,9 @@ Only analysis/plot generation was expanded after freeze; measured checker code s
 [Quality artifacts](../.cache/shape-reduction-v3-quality/) and
 [size-study artifacts](../.cache/shape-reduction-v3-scale/) include frozen sources/manifests,
 raw reports, measurements, CSV/JSON summaries, audits, and the predeclared run plan.
-Plots are available as [PNG](../.cache/shape-reduction-v3-scale/scaling.png),
-[SVG](../.cache/shape-reduction-v3-scale/scaling.svg), and
-[PDF](../.cache/shape-reduction-v3-scale/scaling.pdf).
+Plots are available as [PNG](figures/scaling.png),
+[SVG](figures/scaling.svg), and
+[PDF](figures/scaling.pdf).
 
 Run from the repository root with the model-preflight environment; use fresh output paths
 to repeat measurements rather than resume existing ones:

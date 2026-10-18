@@ -1,5 +1,7 @@
 # Experimental hidden-width reduction
 
+For release scope and availability of raw artifacts, see the [paper-release guide](paper-release.md).
+
 Shape reduction is opt-in. It preserves original-size source, hardware, construction,
 data-contract, and abstract checks, then attempts a smaller model for the existing CPU
 training and validation stages. The memory estimate always describes the original model.
@@ -149,14 +151,14 @@ The full suite passed **124 tests**, with one optional `mamba_ssm` test skipped;
 changed-file Ruff, and sdist/wheel builds passed. Full-repository Ruff still reports the
 pre-existing `E501` in `checks/source/ast_checker.py:357`.
 
-![Parameter reduction by architecture](../.cache/shape-reduction-architectures-r5-final/architecture-reduction.png)
+![Parameter reduction by architecture](figures/architecture-reduction.png)
 
 [Raw reports and frozen sources](../.cache/shape-reduction-architectures-r5-final/) ·
 [Summary JSON](../.cache/shape-reduction-architectures-r5-final/summary.json) ·
 [Per-case CSV](../.cache/shape-reduction-architectures-r5-final/case-results.csv) ·
 [Evidence verification](../.cache/shape-reduction-architectures-r5-final/verification/evidence.json) ·
-[SVG](../.cache/shape-reduction-architectures-r5-final/architecture-reduction.svg) ·
-[PDF](../.cache/shape-reduction-architectures-r5-final/architecture-reduction.pdf)
+[SVG](figures/architecture-reduction.svg) ·
+[PDF](figures/architecture-reduction.pdf)
 
 The figure measures parameter counts, not speedup. End-to-end median/P95 latency was
 8.06/17.97 seconds in this selected corpus, without a comparison arm. Routine verification

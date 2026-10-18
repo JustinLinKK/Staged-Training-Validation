@@ -1,5 +1,7 @@
 # Shape-reduction adversarial audit
 
+For release scope and availability of raw artifacts, see the [paper-release guide](paper-release.md).
+
 This follow-up tests defect detection with **automatic reduction only**. No reduction-off
 or v1 baseline arm is run. Original-width execution still occurs when the checker falls
 back or confirms a reduced failure; that is part of the auto arm's normal behavior.
@@ -31,10 +33,10 @@ Across the complete corpus, reduction applied in 135 of 450 eligible scenario at
 Every report passed JSON-schema validation. Independent checks verified 60 frozen source
 hashes, 177 applicable original-model memory estimates, and 450 original parameter counts.
 
-![Auto-only adversarial audit outcomes](../.cache/shape-reduction-audit-final/audit.png)
+![Auto-only adversarial audit outcomes](figures/audit.png)
 
-[SVG figure](../.cache/shape-reduction-audit-final/audit.svg) ·
-[PDF figure](../.cache/shape-reduction-audit-final/audit.pdf) ·
+[SVG figure](figures/audit.svg) ·
+[PDF figure](figures/audit.pdf) ·
 [Case results](../.cache/shape-reduction-audit-final/case-results.csv) ·
 [Evidence verification](../.cache/shape-reduction-audit-final/verification/evidence.json)
 

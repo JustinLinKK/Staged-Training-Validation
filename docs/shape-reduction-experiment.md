@@ -1,5 +1,7 @@
 # Preflight v2 comparison — 2026-10-16
 
+For release scope and availability of raw artifacts, see the [paper-release guide](paper-release.md).
+
 The implementation works as an opt-in reduced-width workflow checker, but **both acceptance
 gates failed** on the frozen corpus. Keep `execution.shape_reduction.mode: off` as the default.
 The experiment supports the structural separation, but does not establish defect-detection
@@ -180,9 +182,9 @@ Artifacts are under [`../.cache/shape-reduction-v2-20261016-final/`](../.cache/s
 - [Summary JSON](../.cache/shape-reduction-v2-20261016-final/summary.json),
   [per-case/category CSV](../.cache/shape-reduction-v2-20261016-final/breakdown.csv), and
   [per-trial CSV](../.cache/shape-reduction-v2-20261016-final/measurements.csv).
-- [PNG](../.cache/shape-reduction-v2-20261016-final/comparison.png),
-  [SVG](../.cache/shape-reduction-v2-20261016-final/comparison.svg), and
-  [PDF](../.cache/shape-reduction-v2-20261016-final/comparison.pdf) comparison plots.
+- [PNG](figures/comparison.png),
+  [SVG](figures/comparison.svg), and
+  [PDF](figures/comparison.pdf) comparison plots.
 - [Frozen corpus](../.cache/shape-reduction-v2-20261016-final/corpus.json), raw manifests/reports/logs
   in `raw/`, frozen checker sources in `implementation/`, and original v1 sources in `baseline/`.
 - [Audit](../.cache/shape-reduction-v2-20261016-final/audit.json),
