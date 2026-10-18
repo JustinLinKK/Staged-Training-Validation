@@ -1,4 +1,4 @@
-# Model Preflight
+# Staged Training Validation
 
 CPU-first preflight checks for generated PyTorch training candidates. Give the checker a
 candidate manifest and a small representative fixture; receive a structured diagnostic report
