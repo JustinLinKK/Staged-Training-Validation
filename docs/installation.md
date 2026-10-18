@@ -13,7 +13,7 @@ implementation. A dedicated virtual environment avoids conflicts with unrelated 
 ```bash
 git clone https://github.com/JustinLinKK/nn-model-preflight-checker.git
 cd nn-model-preflight-checker
-git checkout v0.2.0
+git checkout v0.2.1
 python -m venv .venv
 . .venv/bin/activate
 python -m pip install .
@@ -29,14 +29,14 @@ an existing compatible PyTorch installation is reused. The package does not requ
 This single command installs the paper version without a managed checkout; Git must be present:
 
 ```bash
-python -m pip install "git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.0"
+python -m pip install "git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.1"
 ```
 
 Use a full commit SHA instead of the tag for an immutable dependency pin. For a requirements
 file, the equivalent direct reference is:
 
 ```text
-model-preflight @ git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.0
+model-preflight @ git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.1
 ```
 
 Examples and research scripts are available in the repository/source distribution; the runtime
@@ -65,7 +65,7 @@ Build artifacts from a checkout:
 ```bash
 python -m pip install build
 python -m build
-python -m pip install dist/model_preflight-0.2.0-py3-none-any.whl
+python -m pip install dist/model_preflight-0.2.1-py3-none-any.whl
 ```
 
 The wheel also works in an offline environment when all runtime dependencies are already

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 - 2026-10-17
+
+Paper software release, superseding v0.2.0.
+
+- Fix strict type checking across PyTorch versions with different `ShapeProp` annotations.
+  Shape propagation and reduction behavior are unchanged.
+- Declare the existing compatibility tests' Torchvision dependency in the development extra
+  and select its CPU build in CI. Runtime dependencies remain unchanged.
+- Update repository installation and citation pins to the verified patch release.
+
 ## 0.2.0 - 2026-10-17
 
 Research software release for the paper, installed from this repository or its wheel.

@@ -16,7 +16,7 @@ modules into the runtime package or change their import paths as a documentation
 ## Editable setup and verification
 
 ```bash
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -e '.[dev]'
 ruff check .
 mypy src/model_preflight
@@ -39,7 +39,7 @@ the repository so an editable checkout cannot conceal missing packaged resources
 ```bash
 python -m venv /tmp/model-preflight-wheel-test
 /tmp/model-preflight-wheel-test/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-/tmp/model-preflight-wheel-test/bin/python -m pip install dist/model_preflight-0.2.0-py3-none-any.whl
+/tmp/model-preflight-wheel-test/bin/python -m pip install dist/model_preflight-0.2.1-py3-none-any.whl
 cd /tmp
 /tmp/model-preflight-wheel-test/bin/model-preflight --version
 ```

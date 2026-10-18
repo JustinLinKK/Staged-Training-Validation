@@ -4,7 +4,7 @@ CPU-first preflight checks for generated PyTorch training candidates. Give the c
 candidate manifest and a small representative fixture; receive a structured diagnostic report
 before spending a full GPU allocation.
 
-**Paper software release: v0.2.0.** Install from this repository or a built wheel. This project
+**Paper software release: v0.2.1.** Install from this repository or a built wheel. This project
 is not published to PyPI; the public `model-preflight` PyPI project is unrelated.
 
 [Documentation wiki](docs/README.md) · [Installation](docs/installation.md) ·
@@ -18,14 +18,14 @@ Use Python 3.10+ on Linux or WSL2, preferably in a virtual environment. From a c
 ```bash
 git clone https://github.com/JustinLinKK/nn-model-preflight-checker.git
 cd nn-model-preflight-checker
-git checkout v0.2.0
+git checkout v0.2.1
 python -m pip install .
 ```
 
 Or install the paper release directly, without managing a checkout:
 
 ```bash
-python -m pip install "git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.0"
+python -m pip install "git+https://github.com/JustinLinKK/nn-model-preflight-checker.git@v0.2.1"
 ```
 
 A compatible PyTorch installation is reused. For a new CPU-only environment, install PyTorch
@@ -138,6 +138,6 @@ and links reproduction commands. Historical experiment results are not measureme
 later revision. In particular, the original shape-reduction acceptance gates failed; later
 auto-only audits do not establish universal numerical equivalence.
 
-Use [CITATION.cff](CITATION.cff) to cite the software, pin `v0.2.0` or its commit, and record the
+Use [CITATION.cff](CITATION.cff) to cite the software, pin `v0.2.1` or its commit, and record the
 PyTorch version and execution settings. See [development](docs/development.md) for editable
 installation, tests, package validation, and the repository layout.

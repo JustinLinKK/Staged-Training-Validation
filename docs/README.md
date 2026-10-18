@@ -1,6 +1,6 @@
 # Documentation wiki
 
-This wiki is versioned with the code. For the paper, read it from tag **v0.2.0** rather than
+This wiki is versioned with the code. For the paper, read it from tag **v0.2.1** rather than
 the moving `main` branch. The [project README](../README.md) is the short entry point.
 
 ## Start here

@@ -11,7 +11,7 @@ import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import nn
@@ -734,7 +734,7 @@ def reduce_model(
                 graph = _trace(graph_probe)
                 bound = inspect.signature(graph.forward).bind(*inputs[0][0], **inputs[0][1])
                 bound.apply_defaults()
-                ShapeProp(graph).propagate(*bound.arguments.values())  # type: ignore[no-untyped-call]
+                cast(Any, ShapeProp)(graph).propagate(*bound.arguments.values())
                 plan = _plan(graph, settings)
             if not plan:
                 raise UnsupportedReduction("no_reducible_hidden_dimensions")

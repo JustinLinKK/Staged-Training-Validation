@@ -1,4 +1,4 @@
-# Paper software release: v0.2.0
+# Paper software release: v0.2.1
 
 Release date: **2026-10-17**. This is a research software snapshot, not a claim of universal
 model correctness or completed GPU validation. Cite [CITATION.cff](../CITATION.cff), pin the
@@ -27,7 +27,9 @@ the external sandbox required for untrusted candidate code.
 
 On 2026-10-17, the full suite passed **233 tests**, with six explicit skips for unavailable
 native `mamba_ssm` and optional compatibility probe images. Ruff, mypy, and source/wheel builds
-passed. In a fresh Python 3.13 environment with PyTorch 2.14.1+cpu, `pip install .` passed
+passed. A fresh CPU development environment passed 219 tests with 20 skips, including 14
+additional optional Transformers cases. Strict type checks passed with PyTorch 2.11 and 2.14.
+In a fresh Python 3.13 environment with PyTorch 2.14.1+cpu, `pip install .` passed
 dependency checks and the documented example passed all eight stages outside the checkout.
 The installed wheel also produced `STATIC_PASS` followed by `FULL_PASS` for a reduced MLP
 with two workers/two training steps, and a late `FAIL` (`AUT001`) for detached loss. Both
@@ -63,15 +65,15 @@ release, not the older frozen implementations quoted above.
 ```bash
 # Auto-only synthetic quality replay; original-width fallback remains part of auto mode.
 PYTHONPATH=src:. python scripts/run_shape_reduction_experiment.py freeze \
-  --auto-only --output .cache/paper-v020-auto
+  --auto-only --output .cache/paper-v021-auto
 PYTHONPATH=src:. python scripts/run_shape_reduction_experiment.py run \
-  --output .cache/paper-v020-auto
+  --output .cache/paper-v021-auto
 PYTHONPATH=src:. python scripts/run_shape_reduction_experiment.py summarize \
-  --output .cache/paper-v020-auto
+  --output .cache/paper-v021-auto
 
 # Compare concurrency configurations, all using v2 automatic reduction.
 PYTHONPATH=src:. python scripts/benchmark_parallel_execution.py \
-  --output .cache/paper-v020-parallel
+  --output .cache/paper-v021-parallel
 
 # Exercise the installed package and provisional/final event interface.
 model-preflight check examples/image_classification/preflight.yaml --format events
@@ -92,7 +94,7 @@ Historical raw reports and frozen workspaces referenced by `.cache/` links in th
 reports remain local artifacts; they are not bundled into the Git repository or wheel.
 Those links resolve only in a workspace with the retained artifacts. Figures are included
 under `docs/figures/` so the documentation renders without that workspace. Exact replay of an
-older study requires its frozen implementation and inputs, not merely the v0.2.0 tag.
+older study requires its frozen implementation and inputs, not merely the v0.2.1 tag.
 
 The release is intentionally separate from any paper bibliographic record: no paper title,
 author list, DOI, acceptance, or archival DOI is invented here. Replace the software citation
