@@ -103,6 +103,24 @@ def test_changed_inputs_cannot_receive_full_pass(tmp_path, monkeypatch, input_in
     assert final.report is None
 
 
+def test_changed_symlinked_source_cannot_receive_full_pass(tmp_path, monkeypatch) -> None:
+    manifest, source, _ = _manifest(tmp_path)
+    external_source = tmp_path / "shared_adapter.py"
+    external_source.write_bytes(source.read_bytes())
+    source.unlink()
+    source.symlink_to(external_source)
+
+    def run(self, *, static_result=None):
+        external_source.write_text("class CandidateAdapter:\n    pass\n")
+        return _report(self, static_result)
+
+    monkeypatch.setattr(PreflightRunner, "run", run)
+    final = submit(manifest).completion.result(timeout=5)
+    assert final.status == "INCONCLUSIVE"
+    assert final.error["code"] == "INPUT_CHANGED"
+    assert final.report is None
+
+
 def test_static_rejection_is_terminal_and_never_starts_workers(tmp_path, monkeypatch) -> None:
     manifest, source, _ = _manifest(tmp_path)
     source.write_text("def broken syntax(\n")
