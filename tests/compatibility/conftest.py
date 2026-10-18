@@ -6,5 +6,5 @@ from types import ModuleType
 
 if "Preflight_checker" not in sys.modules:
     package = ModuleType("Preflight_checker")
-    package.__path__ = [str(Path(__file__).resolve().parent)]
+    package.__path__ = [str(Path(__file__).resolve().parents[2])]
     sys.modules["Preflight_checker"] = package

@@ -236,7 +236,7 @@ def test_real_two_epoch_adapter_runs_candidate_hook_twice(tmp_path: Path) -> Non
         source.read_text(), workspace=tmp_path, node_id="real-epochs",
         submit=lambda: "job-4", cancel=lambda job_id: None,
         probe=ProbeSpec(
-            (sys.executable, str(Path(__file__).with_name("cpu_probe.py")), str(source), str(tmp_path), "2"),
+            (sys.executable, str(Path(__file__).resolve().parents[2] / "cpu_probe.py"), str(source), str(tmp_path), "2"),
             tmp_path,
         ),
     )
@@ -252,7 +252,7 @@ def test_read_only_fixture_error_is_inconclusive_not_candidate_bug(tmp_path: Pat
         "    raise PermissionError('read-only fixture')\n"
     )
     completed = subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("cpu_probe.py")), str(source), str(tmp_path), "2"],
+        [sys.executable, str(Path(__file__).resolve().parents[2] / "cpu_probe.py"), str(source), str(tmp_path), "2"],
         capture_output=True, text=True, check=True,
     )
     evidence = json.loads(completed.stdout.strip().splitlines()[-1])

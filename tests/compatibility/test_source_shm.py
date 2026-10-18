@@ -224,7 +224,7 @@ loader = DataLoader(dataset, batch_size=32, num_workers=8)
 
 
 def test_missing_default_manifest_reports_actionable_cli_error() -> None:
-    script = Path(__file__).with_name("preflight.py")
+    script = Path(__file__).resolve().parents[2] / "preflight.py"
 
     result = subprocess.run(
         [sys.executable, str(script), "--json"],

@@ -69,12 +69,12 @@ model_preflight = [
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
-testpaths = ["tests", "."]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["preflight.py", "plugin.py", "cpu_probe.py", "test_plugin.py", "test_source_*.py"]
+extend-exclude = ["preflight.py", "plugin.py", "cpu_probe.py", "tests/compatibility/test_*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

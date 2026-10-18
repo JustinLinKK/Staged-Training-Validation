@@ -1,5 +1,5 @@
 include CHANGELOG.md CITATION.cff README-lightning.md environment.yml
-include Dockerfile .dockerignore conftest.py preflight.py plugin.py cpu_probe.py test_*.py
+include Dockerfile .dockerignore preflight.py plugin.py cpu_probe.py
 recursive-include docker Dockerfile.*
 recursive-include docs *.md *.png *.svg *.pdf
 recursive-include examples *.py *.yaml *.md

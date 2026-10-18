@@ -4,11 +4,12 @@
 |---|---|
 | `src/model_preflight/` | Installable checker API, CLI, workers, schemas, and profiles |
 | `tests/` | Package unit, isolation, integration, and mutation tests |
+| `tests/compatibility/` | Lightning compatibility plugin tests and their pytest import setup |
 | `examples/` | Candidate adapter and manifest examples |
 | `scripts/` | Corpus evaluation, reduction experiments, and concurrency benchmark |
 | `docker/` | Full CPU checker and optional CUDA-build images |
 | `docs/` | Versioned documentation wiki, paper evidence, and historical design |
-| Root `preflight.py`, `plugin.py`, `cpu_probe.py`, `test_*.py`, `Dockerfile` | Separate Lightning compatibility plugin and its tests; paths preserved for consumers |
+| Root `preflight.py`, `plugin.py`, `cpu_probe.py`, `Dockerfile` | Separate Lightning compatibility plugin; paths preserved for consumers |
 
 The package and compatibility plugin have distinct interfaces. Do not move the compatibility
 modules into the runtime package or change their import paths as a documentation cleanup.
